@@ -7,64 +7,48 @@
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f4f7f6;
-            color: #333;
+            background-color: #f0f2f5;
+            color: #1c1e21;
             margin: 0;
             padding: 20px;
         }
         h1 {
             text-align: center;
-            color: #1a535c;
+            color: #0c2f5a;
         }
         .container {
             display: flex;
             gap: 20px;
             justify-content: center;
+            max-width: 1400px;
+            margin: 0 auto;
         }
         .panel {
             background-color: #ffffff;
-            border: 1px solid #dde;
+            border: 1px solid #dddfe2;
             border-radius: 8px;
             padding: 20px;
-            width: 45%;
-            height: 60vh;
+            flex: 1;
+            height: 75vh;
             overflow-y: auto;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .panel h2 {
             margin-top: 0;
-            border-bottom: 2px solid #1a535c;
+            border-bottom: 2px solid #0c2f5a;
             padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        pre {
-            background-color: #f9f9f9;
-            border: 1px solid #eee;
-            padding: 10px;
-            border-radius: 5px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+        .status-light {
+            font-size: 1.5em;
         }
-        .feed-item {
-            padding: 8px;
-            border-bottom: 1px solid #eee;
-        }
-        .feed-item:last-child {
-            border-bottom: none;
-        }
-        .status-connecting {
-            color: #fca652;
-        }
-        .status-connected {
-            color: #4caf50;
-        }
-        .status-error {
-            color: #f44336;
-        }
-
-        /* --- Nuevos estilos para Estado de Planta --- */
-        .state-view {
-            padding-top: 10px;
-        }
+        .status-connecting { color: #fca652; }
+        .status-connected { color: #4caf50; }
+        .status-error { color: #f44336; }
+        
+        .state-view { padding-top: 10px; }
         .state-item {
             display: flex;
             justify-content: space-between;
@@ -81,17 +65,52 @@
             font-weight: 600;
             font-family: 'Courier New', Courier, monospace;
         }
-        .state-item span.status-OPERATIONAL {
-            color: #4caf50;
-        }
-        .state-item span.status-WARNING {
-            color: #fca652;
-        }
-        .state-item span.status-CRITICAL {
-            color: #f44336;
-        }
-        /* --- Fin de nuevos estilos --- */
+        .state-item span.status-OPERATIONAL { color: #4caf50; }
+        .state-item span.status-WARNING { color: #fca652; }
+        .state-item span.status-CRITICAL { color: #f44336; }
 
+        .action-card {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-left: 5px solid #f44336;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .action-card.type-WARNING {
+            border-left-color: #fca652;
+        }
+        .action-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .action-card p {
+            margin: 5px 0 15px 0;
+            font-size: 0.95em;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .action-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .action-button:hover {
+            background-color: #0056b3;
+        }
+        .action-button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -100,16 +119,16 @@
 
     <div class="container">
         <div class="panel">
-            <h2><span id="status_8081_light" class="status-connecting">●</span> Estado de Planta (WS: 8081)</h2>
+            <h2><span id="status_8081_light" class="status-light status-connecting">●</span> Estado de Planta (WS: 8081)</h2>
             <div id="status_feed">
-                <p class="feed-item status-connecting">Conectando al servidor de estado...</p>
+                <p class="status-connecting">Conectando al servidor de estado...</p>
             </div>
         </div>
         
         <div class="panel">
-            <h2><span id="status_8082_light" class="status-connecting">●</span> Consola de Operador (WS: 8082)</h2>
+            <h2><span id="status_8082_light" class="status-light status-connecting">●</span> Consola de Operador (WS: 8082)</h2>
             <div id="actions_feed">
-                <p class="feed-item status-connecting">Conectando a la consola de acciones...</p>
+                <p class="status-connecting">Conectando a la consola de acciones...</p>
             </div>
         </div>
     </div>
@@ -122,27 +141,17 @@
             const light8081 = document.getElementById("status_8081_light");
             const light8082 = document.getElementById("status_8082_light");
 
+            const ACTION_DISPATCHER_URL = "http://localhost:8080/decide";
+
             function createFeedEntry(message, type = 'info') {
-                const entry = document.createElement("div");
-                entry.className = `feed-item ${type}`;
+                const entry = document.createElement("p");
+                entry.className = type;
                 entry.textContent = message;
                 return entry;
             }
 
-            function defaultRender(data, feedElement) {
-                const entry = document.createElement("div");
-                entry.className = 'feed-item';
-                
-                const pre = document.createElement("pre");
-                pre.textContent = JSON.stringify(data, null, 2);
-                entry.appendChild(pre);
-                
-                feedElement.prepend(entry);
-            }
-
             function renderPlantState(data, feedElement) {
-                feedElement.innerHTML = ""; 
-                
+                feedElement.innerHTML = "";
                 const view = document.createElement("div");
                 view.className = "state-view";
 
@@ -153,30 +162,94 @@
                     active_alerts: "Alertas Activas",
                     last_update: "Última Actualización"
                 };
-
+                
                 const orderedKeys = ['plant_id', 'status', 'active_alerts', 'monitored_sensors', 'last_update'];
 
-                for (const key of orderedKeys) {
+                orderedKeys.forEach(key => {
                     if (data.hasOwnProperty(key)) {
                         const item = document.createElement("div");
                         item.className = "state-item";
                         
-                        let label = stateMap[key] || key.replaceAll('_', ' ');
+                        let label = stateMap[key] || key.replace(/_/g, ' ');
                         let value = data[key];
                         let valueClass = "";
 
-                        if (key === 'status') {
-                            valueClass = `status-${value}`;
-                        } else if (key === 'last_update') {
-                            value = new Date(value).toLocaleString('es-ES');
-                        }
+                        if (key === 'status') valueClass = `status-${value}`;
+                        if (key === 'last_update') value = new Date(value).toLocaleString('es-ES');
                         
                         item.innerHTML = `<strong>${label}:</strong> <span class="${valueClass}">${value}</span>`;
                         view.appendChild(item);
                     }
-                }
+                });
                 
                 feedElement.appendChild(view);
+            }
+
+            function renderActionRequired(data, feedElement) {
+                if (feedElement.querySelector(".status-connecting")) {
+                    feedElement.innerHTML = "";
+                }
+
+                const card = document.createElement("div");
+                card.className = `action-card type-${data.type}`;
+                card.id = `alert-${data.alert_id}`;
+
+                card.innerHTML = `
+                    <h3>Acción Requerida: Sensor ${data.sensor_id} (${data.type})</h3>
+                    <p>ID Alerta: ${data.alert_id}</p>
+                    <div class="action-buttons" id="buttons-${data.alert_id}"></div>
+                `;
+
+                const buttonsContainer = card.querySelector(`#buttons-${data.alert_id}`);
+                
+                data.options.forEach(option => {
+                    const button = document.createElement("button");
+                    button.className = "action-button";
+                    button.textContent = option.replace(/_/g, ' ');
+                    button.dataset.action = option;
+                    button.dataset.alertId = data.alert_id;
+                    button.onclick = () => handleActionClick(data.alert_id, option);
+                    buttonsContainer.appendChild(button);
+                });
+
+                feedElement.prepend(card);
+            }
+
+            async function handleActionClick(alertId, chosenAction) {
+                console.log(`Enviando decisión: ${alertId}, ${chosenAction}`);
+                
+                const buttonsContainer = document.getElementById(`buttons-${alertId}`);
+                buttonsContainer.querySelectorAll('button').forEach(btn => {
+                    btn.disabled = true;
+                    btn.textContent = "Enviando...";
+                });
+
+                try {
+                    const response = await fetch(ACTION_DISPATCHER_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            alert_id: alertId,
+                            chosen_action: chosenAction
+                        })
+                    });
+
+                    const card = document.getElementById(`alert-${alertId}`);
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log("Respuesta del dispatcher:", result);
+                        buttonsContainer.innerHTML = `<p><strong>Acción (${chosenAction}) enviada con éxito.</strong></p>`;
+                        card.style.opacity = "0.5";
+                    } else {
+                        console.error("Error al enviar la decisión");
+                        buttonsContainer.innerHTML = `<p style="color: red;"><strong>Error al enviar acción.</strong></p>`;
+                        buttonsContainer.querySelectorAll('button').forEach(btn => btn.disabled = false);
+                    }
+                } catch (error) {
+                    console.error("Error de red:", error);
+                    buttonsContainer.innerHTML = `<p style="color: red;"><strong>Error de conexión con el dispatcher.</strong></p>`;
+                    buttonsContainer.querySelectorAll('button').forEach(btn => btn.disabled = false);
+                }
             }
 
             function setupWebSocket(url, feedElement, lightElement, name, renderCallback) {
@@ -184,43 +257,39 @@
 
                 ws.onopen = () => {
                     console.log(`Conectado a ${name}`);
-                    const statusMessage = (name === "Estado de Planta") ? 
-                        "Esperando actualización de estado..." : 
-                        "Esperando acciones de operador...";
-                    
-                    feedElement.innerHTML = "";
-                    feedElement.prepend(createFeedEntry(statusMessage, 'status-connected'));
-                    lightElement.className = 'status-connected';
+                    const msg = (name === "Estado de Planta") ? "Esperando estado..." : "Esperando acciones...";
+                    if (!feedElement.querySelector(".action-card")) {
+                        feedElement.innerHTML = "";
+                        feedElement.prepend(createFeedEntry(msg, 'status-connected'));
+                    }
+                    lightElement.className = 'status-light status-connected';
                 };
 
                 ws.onmessage = (event) => {
-                    console.log(`Mensaje de ${name}:`, event.data);
                     try {
                         const data = JSON.parse(event.data);
                         renderCallback(data, feedElement);
                     } catch (e) {
-                        console.error(`Error parsing mensaje de ${name}:`, e);
-                        feedElement.prepend(createFeedEntry(`Error al procesar mensaje: ${e.message}`, 'status-error'));
-                        defaultRender(event.data, feedElement);
+                        console.error("Error al parsear JSON:", e);
+                        feedElement.prepend(createFeedEntry(event.data, 'status-error'));
                     }
                 };
 
                 ws.onclose = () => {
                     console.log(`Desconectado de ${name}`);
                     feedElement.prepend(createFeedEntry(`Conexión perdida. Intentando reconectar...`, 'status-error'));
-                    lightElement.className = 'status-error';
+                    lightElement.className = 'status-light status-error';
                     setTimeout(() => setupWebSocket(url, feedElement, lightElement, name, renderCallback), 3000);
                 };
 
                 ws.onerror = (error) => {
                     console.error(`Error en ${name}:`, error);
-                    feedElement.prepend(createFeedEntry(`Error de conexión.`, 'status-error'));
-                    lightElement.className = 'status-error';
+                    lightElement.className = 'status-light status-error';
                 };
             }
 
             setupWebSocket("ws://localhost:8081", statusFeed, light8081, "Estado de Planta", renderPlantState);
-            setupWebSocket("ws://localhost:8082", actionsFeed, light8082, "Acciones de Operador", defaultRender);
+            setupWebSocket("ws://localhost:8082", actionsFeed, light8082, "Acciones de Operador", renderActionRequired);
         });
     </script>
 

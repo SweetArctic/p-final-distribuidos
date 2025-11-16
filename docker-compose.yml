@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  
+  # --- BROKERS ---
+
+  kafka:
+    image: 'bitnami/kafka:latest'
+    ports:
+      - '9092:9092'
+      - '9093:9093'
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:19092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    networks:
+      - industrial_net
+
+  rabbitmq:
+    image: 'rabbitmq:3.10-management'
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+      - RABBITMQ_PLUGINS_ENABLE=rabbitmq_delayed_message_exchange
+    networks:
+      - industrial_net
+
+  # --- FRONTEND (Servido con Nginx) ---
+
+  dashboard:
+    image: 'nginx:alpine'
+    volumes:
+      - ./dashboard:/usr/share/nginx/html
+    ports:
+      - '80:80'
+    networks:
+      - industrial_net
+
+  # --- FLUJO DE DATOS (KAFKA) ---
+
+  sensor_producer:
+    build: ./sensor_producer
+    networks:
+      - industrial_net
+    depends_on:
+      - kafka
+
+  alert_detector:
+    build: ./alert_detector
+    networks:
+      - industrial_net
+    depends_on:
+      - kafka
+
+  plant_monitor_backend:
+    build: ./plant_monitor_backend
+    ports:
+      - '8081:8081'
+    networks:
+      - industrial_net
+    depends_on:
+      - kafka
+
+  # --- FLUJO DE DECISIONES (RABBITMQ) ---
+
+  alert_router:
+    build: ./alert_router
+    networks:
+      - industrial_net
+    depends_on:
+      - kafka
+      - rabbitmq
+
+  operator_console_backend:
+    build: ./operator_console_backend
+    ports:
+      - '8082:8082'
+    networks:
+      - industrial_net
+    depends_on:
+      - rabbitmq
+
+  action_dispatcher:
+    build: ./action_dispatcher
+    ports:
+      - '8080:8080'
+    networks:
+      - industrial_net
+    depends_on:
+      - rabbitmq
+
+  actuator_worker:
+    build: ./actuator_worker
+    networks:
+      - industrial_net
+    depends_on:
+      - rabbitmq
+
+  maintenance_worker:
+    build: ./maintenance_worker
+    networks:
+      - industrial_net
+    depends_on:
+      - rabbitmq
+
+networks:
+  industrial_net:
+    driver: bridge
