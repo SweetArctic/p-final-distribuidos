@@ -156,12 +156,12 @@
 
                 const orderedKeys = ['plant_id', 'status', 'active_alerts', 'monitored_sensors', 'last_update'];
 
-                orderedKeys.forEach(key => {
+                for (const key of orderedKeys) {
                     if (data.hasOwnProperty(key)) {
                         const item = document.createElement("div");
                         item.className = "state-item";
                         
-                        let label = stateMap[key] || key.replace(/_/g, ' ');
+                        let label = stateMap[key] || key.replaceAll('_', ' ');
                         let value = data[key];
                         let valueClass = "";
 
@@ -174,7 +174,7 @@
                         item.innerHTML = `<strong>${label}:</strong> <span class="${valueClass}">${value}</span>`;
                         view.appendChild(item);
                     }
-                });
+                }
                 
                 feedElement.appendChild(view);
             }
