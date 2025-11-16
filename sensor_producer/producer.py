@@ -45,7 +45,7 @@ try:
         
         producer.flush()
         print("--- Ciclo completado. Esperando 1 segundo. ---")
-        time.sleep(1)
+        time.sleep(6)
 
 except KeyboardInterrupt:
     print("Cerrando productor.")

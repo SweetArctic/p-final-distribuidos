@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from contextlib import contextmanager
+from fastapi.middleware.cors import CORSMiddleware
 
 RABBITMQ_HOST = 'rabbitmq'
 CRITICAL_QUEUE = 'critical_actions_queue'
@@ -14,6 +15,15 @@ DELAY_24H_MS = 24 * 60 * 60 * 1000 # 24 horas en milisegundos
 print("Iniciando action_dispatcher...")
 
 app = FastAPI()
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Modelo de Pydantic para la solicitud POST ---
 class Decision(BaseModel):
