@@ -5,7 +5,7 @@ services:
   # --- BROKERS ---
 
   kafka:
-    image: 'bitnami/kafka:latest'
+    image: 'bitnami/kafka:3.7'
     ports:
       - '9092:9092'
       - '9093:9093'
