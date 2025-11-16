@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Mantenimiento Predictivo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #1a535c;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+        .panel {
+            background-color: #ffffff;
+            border: 1px solid #dde;
+            border-radius: 8px;
+            padding: 20px;
+            width: 45%;
+            height: 60vh;
+            overflow-y: auto;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .panel h2 {
+            margin-top: 0;
+            border-bottom: 2px solid #1a535c;
+            padding-bottom: 10px;
+        }
+        pre {
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .feed-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .feed-item:last-child {
+            border-bottom: none;
+        }
+        .status-connecting {
+            color: #fca652;
+        }
+        .status-connected {
+            color: #4caf50;
+        }
+        .status-error {
+            color: #f44336;
+        }
+
+        /* --- Nuevos estilos para Estado de Planta --- */
+        .state-view {
+            padding-top: 10px;
+        }
+        .state-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 5px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 1.1em;
+        }
+        .state-item strong {
+            color: #333;
+            text-transform: capitalize;
+        }
+        .state-item span {
+            color: #0056b3;
+            font-weight: 600;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .state-item span.status-OPERATIONAL {
+            color: #4caf50;
+        }
+        .state-item span.status-WARNING {
+            color: #fca652;
+        }
+        .state-item span.status-CRITICAL {
+            color: #f44336;
+        }
+        /* --- Fin de nuevos estilos --- */
+
+    </style>
+</head>
+<body>
+
+    <h1>Dashboard de Mantenimiento Predictivo</h1>
+
+    <div class="container">
+        <div class="panel">
+            <h2><span id="status_8081_light" class="status-connecting">●</span> Estado de Planta (WS: 8081)</h2>
+            <div id="status_feed">
+                <p class="feed-item status-connecting">Conectando al servidor de estado...</p>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2><span id="status_8082_light" class="status-connecting">●</span> Consola de Operador (WS: 8082)</h2>
+            <div id="actions_feed">
+                <p class="feed-item status-connecting">Conectando a la consola de acciones...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            
+            const statusFeed = document.getElementById("status_feed");
+            const actionsFeed = document.getElementById("actions_feed");
+            const light8081 = document.getElementById("status_8081_light");
+            const light8082 = document.getElementById("status_8082_light");
+
+            function createFeedEntry(message, type = 'info') {
+                const entry = document.createElement("div");
+                entry.className = `feed-item ${type}`;
+                entry.textContent = message;
+                return entry;
+            }
+
+            function defaultRender(data, feedElement) {
+                const entry = document.createElement("div");
+                entry.className = 'feed-item';
+                
+                const pre = document.createElement("pre");
+                pre.textContent = JSON.stringify(data, null, 2);
+                entry.appendChild(pre);
+                
+                feedElement.prepend(entry);
+            }
+
+            function renderPlantState(data, feedElement) {
+                feedElement.innerHTML = ""; 
+                
+                const view = document.createElement("div");
+                view.className = "state-view";
+
+                const stateMap = {
+                    plant_id: "ID Planta",
+                    status: "Estado General",
+                    monitored_sensors: "Sensores Monitoreados",
+                    active_alerts: "Alertas Activas",
+                    last_update: "Última Actualización"
+                };
+
+                const orderedKeys = ['plant_id', 'status', 'active_alerts', 'monitored_sensors', 'last_update'];
+
+                orderedKeys.forEach(key => {
+                    if (data.hasOwnProperty(key)) {
+                        const item = document.createElement("div");
+                        item.className = "state-item";
+                        
+                        let label = stateMap[key] || key.replace(/_/g, ' ');
+                        let value = data[key];
+                        let valueClass = "";
+
+                        if (key === 'status') {
+                            valueClass = `status-${value}`;
+                        } else if (key === 'last_update') {
+                            value = new Date(value).toLocaleString('es-ES');
+                        }
+                        
+                        item.innerHTML = `<strong>${label}:</strong> <span class="${valueClass}">${value}</span>`;
+                        view.appendChild(item);
+                    }
+                });
+                
+                feedElement.appendChild(view);
+            }
+
+            function setupWebSocket(url, feedElement, lightElement, name, renderCallback) {
+                const ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    console.log(`Conectado a ${name}`);
+                    const statusMessage = (name === "Estado de Planta") ? 
+                        "Esperando actualización de estado..." : 
+                        "Esperando acciones de operador...";
+                    
+                    feedElement.innerHTML = "";
+                    feedElement.prepend(createFeedEntry(statusMessage, 'status-connected'));
+                    lightElement.className = 'status-connected';
+                };
+
+                ws.onmessage = (event) => {
+                    console.log(`Mensaje de ${name}:`, event.data);
+                    try {
+                        const data = JSON.parse(event.data);
+                        renderCallback(data, feedElement);
+                    } catch (e) {
+                        console.error(`Error parsing mensaje de ${name}:`, e);
+                        feedElement.prepend(createFeedEntry(`Error al procesar mensaje: ${e.message}`, 'status-error'));
+                        defaultRender(event.data, feedElement);
+                    }
+                };
+
+                ws.onclose = () => {
+                    console.log(`Desconectado de ${name}`);
+                    feedElement.prepend(createFeedEntry(`Conexión perdida. Intentando reconectar...`, 'status-error'));
+                    lightElement.className = 'status-error';
+                    setTimeout(() => setupWebSocket(url, feedElement, lightElement, name, renderCallback), 3000);
+                };
+
+                ws.onerror = (error) => {
+                    console.error(`Error en ${name}:`, error);
+                    feedElement.prepend(createFeedEntry(`Error de conexión.`, 'status-error'));
+                    lightElement.className = 'status-error';
+                };
+            }
+
+            setupWebSocket("ws://localhost:8081", statusFeed, light8081, "Estado de Planta", renderPlantState);
+            setupWebSocket("ws://localhost:8082", actionsFeed, light8082, "Acciones de Operador", defaultRender);
+        });
+    </script>
+
+</body>
+</html>
