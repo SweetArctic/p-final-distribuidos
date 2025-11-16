@@ -94,7 +94,7 @@
             flex-wrap: wrap;
         }
         .action-button {
-            background-color: #007bff;
+            background-color: #0056b3;
             color: white;
             border: none;
             border-radius: 5px;
@@ -165,12 +165,12 @@
                 
                 const orderedKeys = ['plant_id', 'status', 'active_alerts', 'monitored_sensors', 'last_update'];
 
-                orderedKeys.forEach(key => {
+                for (const key of orderedKeys) {
                     if (data.hasOwnProperty(key)) {
                         const item = document.createElement("div");
                         item.className = "state-item";
                         
-                        let label = stateMap[key] || key.replace(/_/g, ' ');
+                        let label = stateMap[key] || key.replaceAll('_', ' ');
                         let value = data[key];
                         let valueClass = "";
 
@@ -180,7 +180,7 @@
                         item.innerHTML = `<strong>${label}:</strong> <span class="${valueClass}">${value}</span>`;
                         view.appendChild(item);
                     }
-                });
+                }
                 
                 feedElement.appendChild(view);
             }
@@ -202,15 +202,15 @@
 
                 const buttonsContainer = card.querySelector(`#buttons-${data.alert_id}`);
                 
-                data.options.forEach(option => {
+                for (const option of data.options) {
                     const button = document.createElement("button");
                     button.className = "action-button";
-                    button.textContent = option.replace(/_/g, ' ');
+                    button.textContent = option.replaceAll('_', ' ');
                     button.dataset.action = option;
                     button.dataset.alertId = data.alert_id;
                     button.onclick = () => handleActionClick(data.alert_id, option);
                     buttonsContainer.appendChild(button);
-                });
+                }
 
                 feedElement.prepend(card);
             }
@@ -219,10 +219,10 @@
                 console.log(`Enviando decisión: ${alertId}, ${chosenAction}`);
                 
                 const buttonsContainer = document.getElementById(`buttons-${alertId}`);
-                buttonsContainer.querySelectorAll('button').forEach(btn => {
+                for (const btn of buttonsContainer.querySelectorAll('button')) {
                     btn.disabled = true;
                     btn.textContent = "Enviando...";
-                });
+                }
 
                 try {
                     const response = await fetch(ACTION_DISPATCHER_URL, {
@@ -243,12 +243,12 @@
                     } else {
                         console.error("Error al enviar la decisión");
                         buttonsContainer.innerHTML = `<p style="color: red;"><strong>Error al enviar acción.</strong></p>`;
-                        buttonsContainer.querySelectorAll('button').forEach(btn => btn.disabled = false);
+                        for (const btn of buttonsContainer.querySelectorAll('button')) btn.disabled = false;
                     }
                 } catch (error) {
                     console.error("Error de red:", error);
                     buttonsContainer.innerHTML = `<p style="color: red;"><strong>Error de conexión con el dispatcher.</strong></p>`;
-                    buttonsContainer.querySelectorAll('button').forEach(btn => btn.disabled = false);
+                    for (const btn of buttonsContainer.querySelectorAll('button')) btn.disabled = false;
                 }
             }
 
