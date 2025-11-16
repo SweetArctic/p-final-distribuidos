@@ -77,7 +77,7 @@ try:
             "vibration": alert_data.get("vibration"),
             "timestamp": alert_data.get("timestamp"),
             "options": options
-        } [cite: 21]
+        }
         
         try:
             rmq_channel.basic_publish(
