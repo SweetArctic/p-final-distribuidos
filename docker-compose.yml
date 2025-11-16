@@ -26,16 +26,20 @@ services:
       - industrial_net
 
   rabbitmq:
-    image: 'rabbitmq:management'
+    build: ./rabbitmq_custom
     ports:
       - '5672:5672'
       - '15672:15672'
     environment:
       - RABBITMQ_DEFAULT_USER=user
       - RABBITMQ_DEFAULT_PASS=password
-      - RABBITMQ_PLUGINS_ENABLE=rabbitmq_delayed_message_exchange
     networks:
       - industrial_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --- FRONTEND (Servido con Nginx) ---
 
