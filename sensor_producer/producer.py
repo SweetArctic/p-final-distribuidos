@@ -32,7 +32,7 @@ try:
     while True:
         print("\n--- Nuevo ciclo de envío ---")
         for sensor_id in SENSOR_IDS:
-            vibration = round(random.uniform(10.0, 105.0), 2) 
+            vibration = round(random.uniform(10.0, 105.0), 2)
             
             message = {
                 'sensor_id': sensor_id,
