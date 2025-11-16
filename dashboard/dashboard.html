@@ -287,9 +287,8 @@
                     lightElement.className = 'status-light status-error';
                 };
             }
-
-            setupWebSocket("ws://localhost:8081", statusFeed, light8081, "Estado de Planta", renderPlantState);
-            setupWebSocket("ws://localhost:8082", actionsFeed, light8082, "Acciones de Operador", renderActionRequired);
+            setupWebSocket("ws://localhost:8081/ws", statusFeed, light8081, "Estado de Planta", renderPlantState);
+            setupWebSocket("ws://localhost:8082/ws", actionsFeed, light8082, "Acciones de Operador", renderActionRequired);
         });
     </script>
 
