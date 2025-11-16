@@ -1,27 +1,18 @@
 import sys
 import json
 import time
-import os
 import pika
 
 RABBITMQ_HOST = 'rabbitmq'
 QUEUE_NAME = 'critical_actions_queue'
 
 print("Iniciando actuator_worker...")
+
 def connect_rabbitmq():
-    # Read credentials from environment to avoid hardcoding compromised secrets.
-    rabbit_user = os.environ.get('RABBITMQ_USER', 'user')
-    rabbit_pass = os.environ.get('RABBITMQ_PASSWORD')
-    if not rabbit_pass:
-        print("Actuator Worker: RABBITMQ_PASSWORD is not set. Refusing to start with a default/compromised password.")
-        sys.exit(1)
-
-    credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
-
     while True:
         try:
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=credentials)
+                pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password'))
             )
             channel = connection.channel()
             
@@ -36,7 +27,6 @@ def connect_rabbitmq():
         except pika.exceptions.AMQPConnectionError as e:
             print(f"Actuator Worker: Error conectando a RabbitMQ: {e}. Reintentando en 5s...")
             time.sleep(5)
-            time.sleep(5)
 
 def on_message_callback(ch, method, properties, body):
     try:
@@ -49,9 +39,9 @@ def on_message_callback(ch, method, properties, body):
         print(f"  Acción: {action}")
         
         # Simular el trabajo (ej. apagar un actuador)
-        print("  ... Ejecutando apagado de emergencia ...")
-        time.sleep(3)
-        print("  ... Simulación de apagado completada ...")
+        print(f"  ... Ejecutando apagado de emergencia ...")
+        time.sleep(3) 
+        print(f"  ... Simulación de apagado completada ...")
         
         # Confirmar (ack) que el mensaje fue procesado
         ch.basic_ack(delivery_tag=method.delivery_tag)

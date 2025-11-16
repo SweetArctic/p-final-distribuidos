@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import threading
 import time
 import pika
@@ -9,9 +8,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from typing import List
 
-RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'rabbitmq')
-RABBITMQ_USER = os.getenv('RABBITMQ_USER', 'user')
-RABBITMQ_PASSWORD = os.getenv('RABBITMQ_PASSWORD')
+RABBITMQ_HOST = 'rabbitmq'
 RABBITMQ_EXCHANGE = 'human_alerts'
 
 print("Iniciando operator_console_backend...")
@@ -42,11 +39,7 @@ def rabbitmq_consumer_thread():
     while True:
         try:
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(
-                    host=RABBITMQ_HOST,
-                    port=5672,
-                    credentials=pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD or 'password')
-                )
+                pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password'))
             )
             channel = connection.channel()
             
@@ -64,11 +57,11 @@ def rabbitmq_consumer_thread():
             def callback(ch, method, properties, body):
                 try:
                     message_data = json.loads(body.decode('utf-8'))
-                    print(f"Console: Alerta recibida de RabbitMQ: {message_data.get('alert_id')}")
+                    print(f"Console: Alerta recibida de RabbitMQ: {message_data['alert_id']}")
                     
                     # Programar el broadcast en el loop de eventos de asyncio
                     asyncio.run_coroutine_threadsafe(
-                        manager.broadcast_json(message_data),
+                        manager.broadcast_json(message_data), 
                         loop
                     )
                 except json.JSONDecodeError:

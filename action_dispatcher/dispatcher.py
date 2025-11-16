@@ -1,5 +1,4 @@
 import json
-import os
 import pika
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks, HTTPException
@@ -7,8 +6,6 @@ from pydantic import BaseModel
 from contextlib import contextmanager
 
 RABBITMQ_HOST = 'rabbitmq'
-RABBITMQ_USER = os.getenv('RABBITMQ_USER', 'user')
-RABBITMQ_PASSWORD = os.getenv('RABBITMQ_PASSWORD', 'password')
 CRITICAL_QUEUE = 'critical_actions_queue'
 MAINTENANCE_QUEUE = 'maintenance_queue'
 DELAYED_EXCHANGE = 'delayed_maintenance_exchange'
@@ -21,13 +18,13 @@ app = FastAPI()
 # --- Modelo de Pydantic para la solicitud POST ---
 class Decision(BaseModel):
     alert_id: str
+    chosen_action: str
+
+# --- Gestión de Conexión RabbitMQ ---
 def get_rabbitmq_connection():
     try:
-        # Evitar credenciales embebidas: usar las variables de entorno
-        if RABBITMQ_USER == 'user' or RABBITMQ_PASSWORD == 'password':
-            print("Dispatcher: WARNING: Using default RabbitMQ credentials; change them immediately.")
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD))
+            pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password'))
         )
         print("Dispatcher: Conectado a RabbitMQ.")
         return connection
@@ -133,7 +130,7 @@ if __name__ == "__main__":
     # Asegurarse de que las colas existan al inicio
     try:
         with get_channel():
-            print("Dispatcher: Colas y exchanges verificados al inicio.")
+             print("Dispatcher: Colas y exchanges verificados al inicio.")
     except Exception as e:
         print(f"Error crítico al iniciar: No se pudo conectar a RabbitMQ. {e}")
         # En un escenario real, esto debería reintentarse o fallar

@@ -4,7 +4,6 @@ import time
 import pika
 import random
 import uuid
-import os
 from kafka import KafkaConsumer
 
 KAFKA_BROKER = 'kafka:9092'
@@ -28,17 +27,11 @@ def connect_kafka():
     except Exception as e:
         print(f"Router: Error conectando a Kafka: {e}. Reintentando...")
         return None
+
 def connect_rabbitmq():
     try:
-        # Read RabbitMQ credentials from environment to avoid hardcoded/compromised secrets.
-        rmq_user = os.environ.get('RABBITMQ_USER')
-        rmq_pass = os.environ.get('RABBITMQ_PASSWORD')
-        if not rmq_user or not rmq_pass:
-            raise RuntimeError("Router: RabbitMQ credentials not set in environment (RABBITMQ_USER/RABBITMQ_PASSWORD).")
-
-        credentials = pika.PlainCredentials(rmq_user, rmq_pass)
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=credentials)
+            pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password'))
         )
         channel = connection.channel()
         # Declara el Fanout Exchange
@@ -47,7 +40,6 @@ def connect_rabbitmq():
         return connection, channel
     except Exception as e:
         print(f"Router: Error conectando a RabbitMQ: {e}. Reintentando...")
-        return None, None
         return None, None
 
 kafka_consumer = None
@@ -85,7 +77,7 @@ try:
             "vibration": alert_data.get("vibration"),
             "timestamp": alert_data.get("timestamp"),
             "options": options
-        }
+        } [cite: 21]
         
         try:
             rmq_channel.basic_publish(
