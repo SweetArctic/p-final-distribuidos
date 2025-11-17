@@ -32,14 +32,15 @@ try:
     while True:
         print("\n--- Nuevo ciclo de envío ---")
         for sensor_id in SENSOR_IDS:
-            # Generar un numero aleatorio entre 0 y 1 para determinar el estado
+            
             chance = random.random()
-            if chance < 0.85:
-                vibration = round(random.uniform(10.0, 90), 2)
-            elif chance < 0.95:
-                vibration = round(random.uniform(90.1, 100.0), 2)
+            
+            if chance < 0.40:
+                vibration = round(random.uniform(10.0, 74.9), 2)
+            elif chance < 0.98:
+                vibration = round(random.uniform(75.0, 90.0), 2)
             else:
-                vibration = round(random.uniform(100.1, 105.0), 2)
+                vibration = round(random.uniform(90.1, 105.0), 2)
             
             message = {
                 'sensor_id': sensor_id,
@@ -51,7 +52,7 @@ try:
             producer.send(KAFKA_TOPIC, key=sensor_id, value=message)
         
         producer.flush()
-        # Ciclo de 6 segundos como pediste anteriormente
+        
         print("--- Ciclo completado. Esperando 6 segundos. ---")
         time.sleep(6)
 

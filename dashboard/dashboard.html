@@ -10,20 +10,37 @@
 
     <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
 
+    <!-- PANEL LATERAL IZQUIERDO (Detalles) -->
     <div class="details-drawer" id="sensorDrawer">
         <div class="drawer-header">
             <h2 id="drawerTitle">Sensor X</h2>
             <button class="close-btn" onclick="closeDrawer()">
-                <img src="sensor_close.png" class="icon-btn">
+                <!-- Icono de cerrar con tu asset -->
+                <img src="sensor_close.png" class="icon-btn" alt="Cerrar">
             </button>
         </div>
-        <div class="drawer-content" id="drawerContent"></div>
+        <div class="drawer-content" id="drawerContent">
+            <!-- Aquí se inyectan las alertas específicas -->
+        </div>
     </div>
 
     <div class="main-layout">
         <div class="dashboard-content">
             <h1>Monitor de Sensores en Tiempo Real</h1>
-            <div class="sensors-grid" id="sensorsGrid"></div>
+            
+            <div class="filters-container">
+                <img src="filter.png" alt="Filtrar" class="filter-icon">
+                <label for="sortFilter">Ordenar por: </label>
+                <select id="sortFilter" onchange="updateUI()">
+                    <option value="alpha">Alfabético (A-Z)</option>
+                    <option value="total_problems">Mayor N° Total de Problemas</option>
+                    <option value="most_critical">Mayor N° Críticas</option>
+                    <option value="most_warning">Mayor N° Advertencias</option>
+                </select>
+            </div>
+            
+            <div class="sensors-grid" id="sensorsGrid">
+            </div>
         </div>
 
         <aside class="stats-sidebar">
@@ -79,11 +96,36 @@
             }
         }
 
+        function getSensorStats(alerts) {
+            let critical = 0;
+            let warning = 0;
+            alerts.forEach(a => a.type === 'CRITICAL' ? critical++ : warning++);
+            return { critical, warning, total: alerts.length };
+        }
+
         function renderGrid() {
             const grid = document.getElementById('sensorsGrid');
             grid.innerHTML = "";
 
-            Object.values(sensorsState).forEach(sensor => {
+            let sensorsArray = Object.values(sensorsState);
+            const sortType = document.getElementById('sortFilter').value;
+
+            sensorsArray.sort((a, b) => {
+                const statsA = getSensorStats(a.alerts);
+                const statsB = getSensorStats(b.alerts);
+
+                if (sortType === 'total_problems') {
+                    return statsB.total - statsA.total;
+                } else if (sortType === 'most_critical') {
+                    return statsB.critical - statsA.critical;
+                } else if (sortType === 'most_warning') {
+                    return statsB.warning - statsA.warning;
+                } else {
+                    return a.letter.localeCompare(b.letter);
+                }
+            });
+
+            sensorsArray.forEach(sensor => {
                 let crit = 0, warn = 0;
                 sensor.alerts.forEach(a => a.type === 'CRITICAL' ? crit++ : warn++);
 
@@ -103,7 +145,9 @@
                         </div>
                     </div>
                     <button class="view-details-btn" onclick="openDrawer('${sensor.id}')">
-                        <img src="sensor_open.png" class="icon-btn-small"> Ver detalles
+                        <!-- IMAGEN AGREGADA PARA ABRIR -->
+                        <img src="sensor_open.png" class="icon-btn-small" alt="Abrir">
+                        Ver detalles
                     </button>
                 `;
                 grid.appendChild(card);
@@ -148,45 +192,42 @@
             document.getElementById('overlay').classList.remove('active');
         };
 
-    function renderDrawerContent(sensorId) {
-                const sensor = sensorsState[sensorId];
-                document.getElementById('drawerTitle').textContent = `Sensor ${sensor.letter}`;
-                const content = document.getElementById('drawerContent');
-                content.innerHTML = "";
+        function renderDrawerContent(sensorId) {
+            const sensor = sensorsState[sensorId];
+            document.getElementById('drawerTitle').textContent = `Sensor ${sensor.letter}`;
+            const content = document.getElementById('drawerContent');
+            content.innerHTML = "";
 
-                if (sensor.alerts.length === 0) {
-                    content.innerHTML = "<p>Sin alertas activas.</p>";
-                    return;
-                }
-
-                sensor.alerts.forEach(alert => {
-                    const div = document.createElement('div');
-                    div.className = `alert-item type-${alert.type}`;
-                    
-                    // --- AQUI ESTÁ EL CAMBIO ---
-                    // Agregamos la línea de Vibración y mantenemos el ID en pequeño
-                    div.innerHTML = `
-                        <strong>${alert.type}</strong>
-                        <div style="font-size: 1.2em; margin: 5px 0;">
-                            Vibración: <strong>${alert.vibration}</strong>
-                        </div>
-                        <small style="opacity: 0.7;">ID: ${alert.alert_id.substring(0, 8)}...</small>
-                        <div id="btns-${alert.alert_id}"></div>
-                    `;
-                    // ---------------------------
-                    
-                    const btnContainer = div.querySelector(`#btns-${alert.alert_id}`);
-                    alert.options.forEach(opt => {
-                        const btn = document.createElement('button');
-                        btn.className = 'action-btn';
-                        btn.textContent = opt.replaceAll('_', ' ');
-                        btn.onclick = () => sendDecision(alert.alert_id, opt, sensorId);
-                        btnContainer.appendChild(btn);
-                    });
-
-                    content.appendChild(div);
-                });
+            if (sensor.alerts.length === 0) {
+                content.innerHTML = "<p>Sin alertas activas.</p>";
+                return;
             }
+
+            sensor.alerts.forEach(alert => {
+                const div = document.createElement('div');
+                div.className = `alert-item type-${alert.type}`;
+                
+                div.innerHTML = `
+                    <strong>${alert.type}</strong>
+                    <div style="font-size: 1.2em; margin: 5px 0;">
+                        Vibración: <strong>${alert.vibration}</strong>
+                    </div>
+                    <small style="opacity: 0.7;">ID: ${alert.alert_id.substring(0, 8)}...</small>
+                    <div id="btns-${alert.alert_id}"></div>
+                `;
+                
+                const btnContainer = div.querySelector(`#btns-${alert.alert_id}`);
+                alert.options.forEach(opt => {
+                    const btn = document.createElement('button');
+                    btn.className = 'action-btn';
+                    btn.textContent = opt.replaceAll('_', ' ');
+                    btn.onclick = () => sendDecision(alert.alert_id, opt, sensorId);
+                    btnContainer.appendChild(btn);
+                });
+
+                content.appendChild(div);
+            });
+        }
 
         async function sendDecision(alertId, action, sensorId) {
             try {

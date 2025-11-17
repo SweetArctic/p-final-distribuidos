@@ -70,9 +70,10 @@ h1 {
 }
 
 .sensors-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 15px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
 .sensor-card {
@@ -81,12 +82,8 @@ h1 {
     padding: 10px;
     background: #ffffff;
     transition: 0.2s ease;
-    min-height: 130px;
-}
-
-.sensor-card:hover {
-    transform: translateY(-3px);
-    border-color: #2f7e2f;
+    height: 180px;
+    width: 180px;
 }
 
 .card-header {
@@ -99,6 +96,47 @@ h1 {
     font-size: 2.3rem;
     font-weight: 700;
     color: #2f7e2f;
+}
+
+.filters-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.filter-icon {
+    width: 20px;
+    height: 20px;
+}
+
+select {
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid #5bbb68;
+    color: #628062;
+    font-size: 1rem;
+    background-color: #72ae72;
+    font-weight: 600;
+    cursor: pointer;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 4 5"><path fill="#000" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 25px;
+    transition: all ease-in-out 0.3s;
+}
+
+select:focus {
+    outline: none;
+    border-color: #555;
+}
+
+select:hover {
+    border-color: #2f7e2f;
+    border-radius: 15px;
+    transition: all ease-in-out 0.3s;
 }
 
 .mini-stats {
@@ -122,6 +160,13 @@ h1 {
     border-radius: 6px;
     margin-top: 10px;
     font-weight: 600;
+    transition: all ease-in-out 0.3s;
+}
+
+.view-details-btn:hover {
+    background: #a9e5a9;
+    color: #1a331a;
+    transition: all ease-in-out 0.3s;
 }
 
 .icon-btn-small {
