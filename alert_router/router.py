@@ -31,7 +31,7 @@ def connect_kafka():
 def connect_rabbitmq():
     try:
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password'))
+            pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password'), heartbeat=0)
         )
         channel = connection.channel()
         # Declara el Fanout Exchange

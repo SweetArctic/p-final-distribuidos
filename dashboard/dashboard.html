@@ -3,294 +3,244 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de Mantenimiento Predictivo</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #1c1e21;
-            margin: 0;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: #0c2f5a;
-        }
-        .container {
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        .panel {
-            background-color: #ffffff;
-            border: 1px solid #dddfe2;
-            border-radius: 8px;
-            padding: 20px;
-            flex: 1;
-            height: 75vh;
-            overflow-y: auto;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .panel h2 {
-            margin-top: 0;
-            border-bottom: 2px solid #0c2f5a;
-            padding-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .status-light {
-            font-size: 1.5em;
-        }
-        .status-connecting { color: #fca652; }
-        .status-connected { color: #4caf50; }
-        .status-error { color: #f44336; }
-        
-        .state-view { padding-top: 10px; }
-        .state-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 5px;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 1.1em;
-        }
-        .state-item strong {
-            color: #333;
-            text-transform: capitalize;
-        }
-        .state-item span {
-            color: #0056b3;
-            font-weight: 600;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        .state-item span.status-OPERATIONAL { color: #4caf50; }
-        .state-item span.status-WARNING { color: #fca652; }
-        .state-item span.status-CRITICAL { color: #f44336; }
-
-        .action-card {
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-left: 5px solid #f44336;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        .action-card.type-WARNING {
-            border-left-color: #fca652;
-        }
-        .action-card h3 {
-            margin: 0 0 10px 0;
-            color: #333;
-        }
-        .action-card p {
-            margin: 5px 0 15px 0;
-            font-size: 0.95em;
-        }
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .action-button {
-            background-color: #0056b3;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 10px 15px;
-            font-size: 0.9em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .action-button:hover {
-            background-color: #0056b3;
-        }
-        .action-button:disabled {
-            background-color: #6c757d;
-            cursor: not-allowed;
-        }
-    </style>
+    <title>Monitor Industrial</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-    <h1>Dashboard de Mantenimiento Predictivo</h1>
+    <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
 
-    <div class="container">
-        <div class="panel">
-            <h2><span id="status_8081_light" class="status-light status-connecting">●</span> Estado de Planta (WS: 8081)</h2>
-            <div id="status_feed">
-                <p class="status-connecting">Conectando al servidor de estado...</p>
-            </div>
+    <div class="details-drawer" id="sensorDrawer">
+        <div class="drawer-header">
+            <h2 id="drawerTitle">Sensor X</h2>
+            <button class="close-btn" onclick="closeDrawer()">
+                <img src="sensor_close.png" class="icon-btn">
+            </button>
         </div>
-        
-        <div class="panel">
-            <h2><span id="status_8082_light" class="status-light status-connecting">●</span> Consola de Operador (WS: 8082)</h2>
-            <div id="actions_feed">
-                <p class="status-connecting">Conectando a la consola de acciones...</p>
-            </div>
+        <div class="drawer-content" id="drawerContent"></div>
+    </div>
+
+    <div class="main-layout">
+        <div class="dashboard-content">
+            <h1>Monitor de Sensores en Tiempo Real</h1>
+            <div class="sensors-grid" id="sensorsGrid"></div>
         </div>
+
+        <aside class="stats-sidebar">
+            <div class="stat-box">
+                <span class="stat-title">Mayor número de problemas:</span>
+                <span class="stat-value-big" id="statWorstSensor">-</span>
+            </div>
+
+            <div class="stat-box">
+                <span class="stat-title">Total de Advertencias:</span>
+                <span class="stat-value-medium" id="statTotalWarnings">0</span>
+            </div>
+
+            <div class="stat-box">
+                <span class="stat-title">Total Alertas Críticas:</span>
+                <span class="stat-value-medium" id="statTotalCritical">0</span>
+            </div>
+            
+            <div class="stat-box" style="margin-top: auto;">
+                <span class="stat-title">Estado del Sistema</span>
+                <div style="display: flex; justify-content: space-around; margin-top: 10px;">
+                    <small>WS 8081: <span id="dot8081">●</span></small>
+                    <small>WS 8082: <span id="dot8082">●</span></small>
+                </div>
+            </div>
+        </aside>
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            
-            const statusFeed = document.getElementById("status_feed");
-            const actionsFeed = document.getElementById("actions_feed");
-            const light8081 = document.getElementById("status_8081_light");
-            const light8082 = document.getElementById("status_8082_light");
+        const ACTION_DISPATCHER_URL = "http://localhost:8080/decide";
+        let sensorsState = {};
+        let currentOpenSensor = null;
 
-            const ACTION_DISPATCHER_URL = "http://localhost:8080/decide";
-
-            function createFeedEntry(message, type = 'info') {
-                const entry = document.createElement("p");
-                entry.className = type;
-                entry.textContent = message;
-                return entry;
-            }
-
-            function renderPlantState(data, feedElement) {
-                feedElement.innerHTML = "";
-                const view = document.createElement("div");
-                view.className = "state-view";
-
-                const stateMap = {
-                    plant_id: "ID Planta",
-                    status: "Estado General",
-                    monitored_sensors: "Sensores Monitoreados",
-                    active_alerts: "Alertas Activas",
-                    last_update: "Última Actualización"
+        function initSensors() {
+            const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+            ids.forEach(id => {
+                const key = `sensor_${id}`;
+                sensorsState[key] = {
+                    id: key,
+                    letter: id,
+                    status: 'OPERATIONAL',
+                    alerts: []
                 };
-                
-                const orderedKeys = ['plant_id', 'status', 'active_alerts', 'monitored_sensors', 'last_update'];
+            });
+            updateUI();
+        }
 
-                for (const key of orderedKeys) {
-                    if (data.hasOwnProperty(key)) {
-                        const item = document.createElement("div");
-                        item.className = "state-item";
-                        
-                        let label = stateMap[key] || key.replaceAll('_', ' ');
-                        let value = data[key];
-                        let valueClass = "";
-
-                        if (key === 'status') valueClass = `status-${value}`;
-                        if (key === 'last_update') value = new Date(value).toLocaleString('es-ES');
-                        
-                        item.innerHTML = `<strong>${label}:</strong> <span class="${valueClass}">${value}</span>`;
-                        view.appendChild(item);
-                    }
-                }
-                
-                feedElement.appendChild(view);
+        function updateUI() {
+            renderGrid();
+            renderGlobalStats();
+            if (currentOpenSensor) {
+                renderDrawerContent(currentOpenSensor);
             }
+        }
 
-            function renderActionRequired(data, feedElement) {
-                if (feedElement.querySelector(".status-connecting")) {
-                    feedElement.innerHTML = "";
-                }
+        function renderGrid() {
+            const grid = document.getElementById('sensorsGrid');
+            grid.innerHTML = "";
 
-                const card = document.createElement("div");
-                card.className = `action-card type-${data.type}`;
-                card.id = `alert-${data.alert_id}`;
+            Object.values(sensorsState).forEach(sensor => {
+                let crit = 0, warn = 0;
+                sensor.alerts.forEach(a => a.type === 'CRITICAL' ? crit++ : warn++);
 
+                let statusClass = 'ok';
+                if (crit > 0) statusClass = 'crit';
+                else if (warn > 0) statusClass = 'warn';
+
+                const card = document.createElement('div');
+                card.className = 'sensor-card';
                 card.innerHTML = `
-                    <h3>Acción Requerida: Sensor ${data.sensor_id} (${data.type})</h3>
-                    <p>ID Alerta: ${data.alert_id}</p>
-                    <div class="action-buttons" id="buttons-${data.alert_id}"></div>
+                    <div class="card-header">
+                        <span class="sensor-id-big">${sensor.letter}</span>
+                        <div class="mini-stats">
+                            <div><img src="warning-icon.png" class="mini-icon"> ${warn}</div>
+                            <div><img src="critical-icon.png" class="mini-icon"> ${crit}</div>
+                            <div class="status-icon ${statusClass}"></div>
+                        </div>
+                    </div>
+                    <button class="view-details-btn" onclick="openDrawer('${sensor.id}')">
+                        <img src="sensor_open.png" class="icon-btn-small"> Ver detalles
+                    </button>
                 `;
+                grid.appendChild(card);
+            });
+        }
 
-                const buttonsContainer = card.querySelector(`#buttons-${data.alert_id}`);
+        function renderGlobalStats() {
+            let totalWarn = 0;
+            let totalCrit = 0;
+            let worstSensor = "-";
+            let maxProblems = -1;
+
+            Object.values(sensorsState).forEach(sensor => {
+                let crit = 0, warn = 0;
+                sensor.alerts.forEach(a => a.type === 'CRITICAL' ? crit++ : warn++);
                 
-                for (const option of data.options) {
-                    const button = document.createElement("button");
-                    button.className = "action-button";
-                    button.textContent = option.replaceAll('_', ' ');
-                    button.dataset.action = option;
-                    button.dataset.alertId = data.alert_id;
-                    button.onclick = () => handleActionClick(data.alert_id, option);
-                    buttonsContainer.appendChild(button);
+                totalWarn += warn;
+                totalCrit += crit;
+                
+                const totalProblems = crit + warn;
+                if (totalProblems > maxProblems && totalProblems > 0) {
+                    maxProblems = totalProblems;
+                    worstSensor = sensor.letter;
+                }
+            });
+
+            document.getElementById('statTotalWarnings').textContent = totalWarn;
+            document.getElementById('statTotalCritical').textContent = totalCrit;
+            document.getElementById('statWorstSensor').textContent = worstSensor;
+        }
+
+        window.openDrawer = (sensorId) => {
+            currentOpenSensor = sensorId;
+            document.getElementById('sensorDrawer').classList.add('open');
+            document.getElementById('overlay').classList.add('active');
+            renderDrawerContent(sensorId);
+        };
+
+        window.closeDrawer = () => {
+            currentOpenSensor = null;
+            document.getElementById('sensorDrawer').classList.remove('open');
+            document.getElementById('overlay').classList.remove('active');
+        };
+
+    function renderDrawerContent(sensorId) {
+                const sensor = sensorsState[sensorId];
+                document.getElementById('drawerTitle').textContent = `Sensor ${sensor.letter}`;
+                const content = document.getElementById('drawerContent');
+                content.innerHTML = "";
+
+                if (sensor.alerts.length === 0) {
+                    content.innerHTML = "<p>Sin alertas activas.</p>";
+                    return;
                 }
 
-                feedElement.prepend(card);
-            }
-
-            async function handleActionClick(alertId, chosenAction) {
-                console.log(`Enviando decisión: ${alertId}, ${chosenAction}`);
-                
-                const buttonsContainer = document.getElementById(`buttons-${alertId}`);
-                for (const btn of buttonsContainer.querySelectorAll('button')) {
-                    btn.disabled = true;
-                    btn.textContent = "Enviando...";
-                }
-
-                try {
-                    const response = await fetch(ACTION_DISPATCHER_URL, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            alert_id: alertId,
-                            chosen_action: chosenAction
-                        })
+                sensor.alerts.forEach(alert => {
+                    const div = document.createElement('div');
+                    div.className = `alert-item type-${alert.type}`;
+                    
+                    // --- AQUI ESTÁ EL CAMBIO ---
+                    // Agregamos la línea de Vibración y mantenemos el ID en pequeño
+                    div.innerHTML = `
+                        <strong>${alert.type}</strong>
+                        <div style="font-size: 1.2em; margin: 5px 0;">
+                            Vibración: <strong>${alert.vibration}</strong>
+                        </div>
+                        <small style="opacity: 0.7;">ID: ${alert.alert_id.substring(0, 8)}...</small>
+                        <div id="btns-${alert.alert_id}"></div>
+                    `;
+                    // ---------------------------
+                    
+                    const btnContainer = div.querySelector(`#btns-${alert.alert_id}`);
+                    alert.options.forEach(opt => {
+                        const btn = document.createElement('button');
+                        btn.className = 'action-btn';
+                        btn.textContent = opt.replaceAll('_', ' ');
+                        btn.onclick = () => sendDecision(alert.alert_id, opt, sensorId);
+                        btnContainer.appendChild(btn);
                     });
 
-                    const card = document.getElementById(`alert-${alertId}`);
-                    if (response.ok) {
-                        const result = await response.json();
-                        console.log("Respuesta del dispatcher:", result);
-                        buttonsContainer.innerHTML = `<p><strong>Acción (${chosenAction}) enviada con éxito.</strong></p>`;
-                        card.style.opacity = "0.5";
-                    } else {
-                        console.error("Error al enviar la decisión");
-                        buttonsContainer.innerHTML = `<p style="color: red;"><strong>Error al enviar acción.</strong></p>`;
-                        for (const btn of buttonsContainer.querySelectorAll('button')) btn.disabled = false;
-                    }
-                } catch (error) {
-                    console.error("Error de red:", error);
-                    buttonsContainer.innerHTML = `<p style="color: red;"><strong>Error de conexión con el dispatcher.</strong></p>`;
-                    for (const btn of buttonsContainer.querySelectorAll('button')) btn.disabled = false;
+                    content.appendChild(div);
+                });
+            }
+
+        async function sendDecision(alertId, action, sensorId) {
+            try {
+                const response = await fetch(ACTION_DISPATCHER_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ alert_id: alertId, chosen_action: action })
+                });
+
+                if (response.ok) {
+                    sensorsState[sensorId].alerts = sensorsState[sensorId].alerts.filter(a => a.alert_id !== alertId);
+                    updateUI();
+                }
+            } catch (e) {
+                alert("Error de conexión");
+            }
+        }
+
+        function setupWebSocket(url, type) {
+            const ws = new WebSocket(url);
+            ws.onopen = () => {
+                const dot = url.includes('8081') ? 'dot8081' : 'dot8082';
+                document.getElementById(dot).style.color = 'green';
+            };
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (type === 'status') handlePlantState(data);
+                    if (type === 'action') handleNewAlert(data);
+                } catch(e) {}
+            };
+            ws.onclose = () => {
+                 setTimeout(() => setupWebSocket(url, type), 3000);
+                 const dot = url.includes('8081') ? 'dot8081' : 'dot8082';
+                 document.getElementById(dot).style.color = 'red';
+            };
+        }
+
+        function handlePlantState(data) {}
+
+        function handleNewAlert(data) {
+            const sensorKey = `sensor_${data.sensor_id.replace('sensor_', '')}`;
+            if (sensorsState[sensorKey]) {
+                const exists = sensorsState[sensorKey].alerts.some(a => a.alert_id === data.alert_id);
+                if (!exists) {
+                    sensorsState[sensorKey].alerts.unshift(data);
+                    updateUI();
                 }
             }
+        }
 
-            function setupWebSocket(url, feedElement, lightElement, name, renderCallback) {
-                const ws = new WebSocket(url);
-
-                ws.onopen = () => {
-                    console.log(`Conectado a ${name}`);
-                    const msg = (name === "Estado de Planta") ? "Esperando estado..." : "Esperando acciones...";
-                    if (!feedElement.querySelector(".action-card")) {
-                        feedElement.innerHTML = "";
-                        feedElement.prepend(createFeedEntry(msg, 'status-connected'));
-                    }
-                    lightElement.className = 'status-light status-connected';
-                };
-
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        renderCallback(data, feedElement);
-                    } catch (e) {
-                        console.error("Error al parsear JSON:", e);
-                        feedElement.prepend(createFeedEntry(event.data, 'status-error'));
-                    }
-                };
-
-                ws.onclose = () => {
-                    console.log(`Desconectado de ${name}`);
-                    feedElement.prepend(createFeedEntry(`Conexión perdida. Intentando reconectar...`, 'status-error'));
-                    lightElement.className = 'status-light status-error';
-                    setTimeout(() => setupWebSocket(url, feedElement, lightElement, name, renderCallback), 3000);
-                };
-
-                ws.onerror = (error) => {
-                    console.error(`Error en ${name}:`, error);
-                    lightElement.className = 'status-light status-error';
-                };
-            }
-            setupWebSocket("ws://localhost:8081/ws", statusFeed, light8081, "Estado de Planta", renderPlantState);
-            setupWebSocket("ws://localhost:8082/ws", actionsFeed, light8082, "Acciones de Operador", renderActionRequired);
-        });
+        initSensors();
+        setupWebSocket("ws://localhost:8081/ws", 'status');
+        setupWebSocket("ws://localhost:8082/ws", 'action');
     </script>
-
 </body>
 </html>
