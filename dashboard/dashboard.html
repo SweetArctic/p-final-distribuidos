@@ -221,7 +221,7 @@
                     const btn = document.createElement('button');
                     btn.className = 'action-btn';
                     btn.textContent = opt.replaceAll('_', ' ');
-                    btn.onclick = () => sendDecision(alert.alert_id, opt, sensorId);
+                    btn.onclick = () => sendDecision(alert, opt);
                     btnContainer.appendChild(btn);
                 });
 
@@ -229,16 +229,16 @@
             });
         }
 
-        async function sendDecision(alertId, action, sensorId) {
+        async function sendDecision(alertObject, action) {
             try {
                 const response = await fetch(ACTION_DISPATCHER_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ alert_id: alertId, chosen_action: action })
+                    body: JSON.stringify({ alert: alertObject, chosen_action: action })
                 });
 
                 if (response.ok) {
-                    sensorsState[sensorId].alerts = sensorsState[sensorId].alerts.filter(a => a.alert_id !== alertId);
+                    sensorsState[alertObject.sensor_id].alerts = sensorsState[alertObject.sensor_id].alerts.filter(a => a.alert_id !== alertObject.alert_id);
                     updateUI();
                 }
             } catch (e) {

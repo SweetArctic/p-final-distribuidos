@@ -9,33 +9,23 @@ from fastapi.middleware.cors import CORSMiddleware
 RABBITMQ_HOST = 'rabbitmq'
 CRITICAL_QUEUE = 'critical_actions_queue'
 MAINTENANCE_QUEUE = 'maintenance_queue'
+ACKNOWLEDGED_CRITICAL_QUEUE = 'acknowledged_critical_queue' # Nueva cola
 DELAYED_EXCHANGE = 'delayed_maintenance_exchange'
-DELAY_24H_MS = 24 * 60 * 60 * 1000 # 24 horas en milisegundos
+DELAY_24H_MS = 24 * 60 * 60 * 1000
 
 print("Iniciando action_dispatcher...")
 
 app = FastAPI()
 origins = ["*"]
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- Modelo de Pydantic para la solicitud POST ---
 class Decision(BaseModel):
-    alert_id: str
     chosen_action: str
+    alert: dict # Recibimos la alerta completa
 
-# --- Gestión de Conexión RabbitMQ ---
 def get_rabbitmq_connection():
     try:
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password'))
-        )
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('user', 'password')))
         print("Dispatcher: Conectado a RabbitMQ.")
         return connection
     except pika.exceptions.AMQPConnectionError as e:
@@ -49,25 +39,17 @@ def get_channel():
         connection = get_rabbitmq_connection()
         channel = connection.channel()
         
-        # Declarar colas estándar
         channel.queue_declare(queue=CRITICAL_QUEUE, durable=True)
         channel.queue_declare(queue=MAINTENANCE_QUEUE, durable=True)
-        
-        # Declarar el Exchange con retraso
-        # Se necesita el plugin 'rabbitmq_delayed_message_exchange'
+        channel.queue_declare(queue=ACKNOWLEDGED_CRITICAL_QUEUE, durable=True) # Declarar nueva cola
+
         channel.exchange_declare(
             exchange=DELAYED_EXCHANGE,
             exchange_type='x-delayed-message',
             durable=True,
             arguments={'x-delayed-type': 'direct'}
         )
-        
-        # Vincular la cola de mantenimiento al exchange con retraso
-        channel.queue_bind(
-            queue=MAINTENANCE_QUEUE,
-            exchange=DELAYED_EXCHANGE,
-            routing_key='maintenance.delayed'
-        )
+        channel.queue_bind(queue=MAINTENANCE_QUEUE, exchange=DELAYED_EXCHANGE, routing_key='maintenance.delayed')
         
         yield channel
     except pika.exceptions.AMQPConnectionError:
@@ -76,73 +58,76 @@ def get_channel():
         if connection and connection.is_open:
             connection.close()
 
-# --- Endpoint de Decisión ---
 @app.post("/decide")
 async def decide_action(decision: Decision, background_tasks: BackgroundTasks):
-    print(f"Dispatcher: Decisión recibida para {decision.alert_id}: {decision.chosen_action}")
-    
-    # Usamos tareas en segundo plano para no bloquear la respuesta HTTP
+    alert_id = decision.alert.get("alert_id", "N/A")
+    print(f"Dispatcher: Decisión recibida para {alert_id}: {decision.chosen_action}")
     background_tasks.add_task(route_decision, decision)
-    
-    return {"status": "decision_received", "alert_id": decision.alert_id, "action": decision.chosen_action}
+    return {"status": "decision_received", "alert_id": alert_id, "action": decision.chosen_action}
 
 def route_decision(decision: Decision):
     try:
         with get_channel() as channel:
-            action_body = json.dumps({"alert_id": decision.alert_id, "action": decision.chosen_action})
+            alert = decision.alert
+            alert_id = alert.get("alert_id", "N/A")
             
             if decision.chosen_action == "APAGADO_INMEDIATO":
-                # Publica en la cola de acciones críticas [cite: 30]
+                sensor_id = alert.get("sensor_id")
+                if not sensor_id:
+                    print(f"Error: No se encontró sensor_id en la alerta {alert_id}")
+                    return
+                
+                action_body = json.dumps({"action": decision.chosen_action, "sensor_id": sensor_id})
                 channel.basic_publish(
                     exchange='',
                     routing_key=CRITICAL_QUEUE,
                     body=action_body,
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
-                print(f"Enrutado {decision.alert_id} a {CRITICAL_QUEUE}")
+                print(f"Enrutado apagado del sensor {sensor_id} a {CRITICAL_QUEUE}")
+
+            elif decision.chosen_action == "IGNORAR_10_MINUTOS":
+                # Publicar la alerta completa en la nueva cola
+                channel.basic_publish(
+                    exchange='',
+                    routing_key=ACKNOWLEDGED_CRITICAL_QUEUE,
+                    body=json.dumps(alert),
+                    properties=pika.BasicProperties(delivery_mode=2)
+                )
+                print(f"Enrutada alerta crítica {alert_id} a {ACKNOWLEDGED_CRITICAL_QUEUE} para revisión")
 
             elif decision.chosen_action == "PROGRAMAR_MANTENIMIENTO_AHORA":
-                # Publica en la cola de mantenimiento (sin retraso) [cite: 31]
+                action_body = json.dumps({"alert_id": alert_id, "action": decision.chosen_action})
                 channel.basic_publish(
                     exchange='',
                     routing_key=MAINTENANCE_QUEUE,
                     body=action_body,
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
-                print(f"Enrutado {decision.alert_id} a {MAINTENANCE_QUEUE} (ahora)")
+                print(f"Enrutado {alert_id} a {MAINTENANCE_QUEUE} (ahora)")
 
             elif decision.chosen_action == "RECONOCER_Y_ESPERAR_24H":
-                # Publica en el Exchange con retraso 
-                properties = pika.BasicProperties(
-                    delivery_mode=2,
-                    headers={'x-delay': DELAY_24H_MS}
-                )
+                action_body = json.dumps({"alert_id": alert_id, "action": decision.chosen_action})
+                properties = pika.BasicProperties(delivery_mode=2, headers={'x-delay': DELAY_24H_MS})
                 channel.basic_publish(
                     exchange=DELAYED_EXCHANGE,
                     routing_key='maintenance.delayed',
                     body=action_body,
                     properties=properties
                 )
-                print(f"Enrutado {decision.alert_id} a {MAINTENANCE_QUEUE} (con 24h de retraso)")
-
-            elif decision.chosen_action == "IGNORAR_10_MINUTOS":
-                # Esta acción no tiene un worker, solo se registra
-                print(f"Acción {decision.chosen_action} para {decision.alert_id} registrada. No se enruta a workers.")
+                print(f"Enrutado {alert_id} a {MAINTENANCE_QUEUE} (con 24h de retraso)")
             
             else:
                 print(f"Acción desconocida: {decision.chosen_action}")
 
     except Exception as e:
-        print(f"Error al enrutar la decisión {decision.alert_id}: {e}")
+        print(f"Error al enrutar la decisión para la alerta {decision.alert.get('alert_id', 'N/A')}: {e}")
 
-# --- Punto de Entrada ---
 if __name__ == "__main__":
-    # Asegurarse de que las colas existan al inicio
     try:
         with get_channel():
              print("Dispatcher: Colas y exchanges verificados al inicio.")
     except Exception as e:
         print(f"Error crítico al iniciar: No se pudo conectar a RabbitMQ. {e}")
-        # En un escenario real, esto debería reintentarse o fallar
     
     uvicorn.run(app, host="0.0.0.0", port=8080)
