@@ -63,7 +63,7 @@ try:
         
         options = []
         if alert_type == 'CRITICAL':
-            options = ["APAGADO_INMEDIATO", "IGNORAR_10_MINUTOS"] 
+            options = ["APAGADO_INMEDIATO"] 
         elif alert_type == 'WARNING':
             options = ["PROGRAMAR_MANTENIMIENTO_AHORA", "RECONOCER_Y_ESPERAR_24H"] 
 

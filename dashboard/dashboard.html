@@ -41,6 +41,10 @@
             
             <div class="sensors-grid" id="sensorsGrid">
             </div>
+
+            <div class="programed-actions">
+                <a href="acciones.html" class="programed-actions-btn">Ver Acciones Programadas</a>
+            </div>
         </div>
 
         <aside class="stats-sidebar">
@@ -48,17 +52,14 @@
                 <span class="stat-title">Mayor número de problemas:</span>
                 <span class="stat-value-big" id="statWorstSensor">-</span>
             </div>
-
             <div class="stat-box">
                 <span class="stat-title">Total de Advertencias:</span>
                 <span class="stat-value-medium" id="statTotalWarnings">0</span>
             </div>
-
             <div class="stat-box">
                 <span class="stat-title">Total Alertas Críticas:</span>
                 <span class="stat-value-medium" id="statTotalCritical">0</span>
             </div>
-            
             <div class="stat-box" style="margin-top: auto;">
                 <span class="stat-title">Estado del Sistema</span>
                 <div style="display: flex; justify-content: space-around; margin-top: 10px;">
@@ -72,15 +73,22 @@
     <script>
         const ACTION_DISPATCHER_URL = "http://localhost:8080/decide";
         let sensorsState = {};
+        let decisionHistory = [];
         let currentOpenSensor = null;
 
+        const sensorNames = {
+            'A': 'Motor Principal', 'B': 'Bomba de Refrigeración', 'C': 'Sistema de Ventilación',
+            'D': 'Compresor de Aire', 'E': 'Generador Eléctrico', 'F': 'Caldera Principal',
+            'G': 'Sistema Hidráulico', 'H': 'Panel de Control', 'I': 'Brazo Robótico', 'J': 'Cinta Transportadora'
+        };
+
         function initSensors() {
-            const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-            ids.forEach(id => {
+            Object.keys(sensorNames).forEach(id => {
                 const key = `sensor_${id}`;
                 sensorsState[key] = {
                     id: key,
                     letter: id,
+                    name: sensorNames[id],
                     status: 'OPERATIONAL',
                     alerts: []
                 };
@@ -95,25 +103,20 @@
                 renderDrawerContent(currentOpenSensor);
             }
         }
-
         function getSensorStats(alerts) {
             let critical = 0;
             let warning = 0;
             alerts.forEach(a => a.type === 'CRITICAL' ? critical++ : warning++);
             return { critical, warning, total: alerts.length };
         }
-
         function renderGrid() {
             const grid = document.getElementById('sensorsGrid');
             grid.innerHTML = "";
-
             let sensorsArray = Object.values(sensorsState);
             const sortType = document.getElementById('sortFilter').value;
-
             sensorsArray.sort((a, b) => {
                 const statsA = getSensorStats(a.alerts);
                 const statsB = getSensorStats(b.alerts);
-
                 if (sortType === 'total_problems') {
                     return statsB.total - statsA.total;
                 } else if (sortType === 'most_critical') {
@@ -121,7 +124,7 @@
                 } else if (sortType === 'most_warning') {
                     return statsB.warning - statsA.warning;
                 } else {
-                    return a.letter.localeCompare(b.letter);
+                    return a.name.localeCompare(b.name);
                 }
             });
 
@@ -130,30 +133,41 @@
                 sensor.alerts.forEach(a => a.type === 'CRITICAL' ? crit++ : warn++);
 
                 let statusClass = 'ok';
-                if (crit > 0) statusClass = 'crit';
-                else if (warn > 0) statusClass = 'warn';
+                if (sensor.status === 'DISABLED') {
+                    statusClass = 'disabled';
+                } else if (crit > 0) {
+                    statusClass = 'crit';
+                } else if (warn > 0) {
+                    statusClass = 'warn';
+                }
 
                 const card = document.createElement('div');
-                card.className = 'sensor-card';
+                card.className = `sensor-card ${sensor.status === 'DISABLED' ? 'disabled' : ''}`;
+                
+                let buttonHTML = `<button class="view-details-btn" onclick="openDrawer('${sensor.id}')">
+                    <img src="sensor_open.png" class="icon-btn-small" alt="Abrir">
+                    Ver detalles
+                </button>`;
+
+                if (sensor.status === 'DISABLED') {
+                    buttonHTML = `<button class="view-details-btn" disabled>Inhabilitado</button>`;
+                }
+
                 card.innerHTML = `
                     <div class="card-header">
                         <span class="sensor-id-big">${sensor.letter}</span>
+                        <div class="sensor-name-small">${sensor.name}</div>
                         <div class="mini-stats">
                             <div><img src="warning-icon.png" class="mini-icon"> ${warn}</div>
                             <div><img src="critical-icon.png" class="mini-icon"> ${crit}</div>
                             <div class="status-icon ${statusClass}"></div>
                         </div>
                     </div>
-                    <button class="view-details-btn" onclick="openDrawer('${sensor.id}')">
-                        <!-- IMAGEN AGREGADA PARA ABRIR -->
-                        <img src="sensor_open.png" class="icon-btn-small" alt="Abrir">
-                        Ver detalles
-                    </button>
+                    ${buttonHTML}
                 `;
                 grid.appendChild(card);
             });
         }
-
         function renderGlobalStats() {
             let totalWarn = 0;
             let totalCrit = 0;
@@ -161,16 +175,18 @@
             let maxProblems = -1;
 
             Object.values(sensorsState).forEach(sensor => {
-                let crit = 0, warn = 0;
-                sensor.alerts.forEach(a => a.type === 'CRITICAL' ? crit++ : warn++);
-                
-                totalWarn += warn;
-                totalCrit += crit;
-                
-                const totalProblems = crit + warn;
-                if (totalProblems > maxProblems && totalProblems > 0) {
-                    maxProblems = totalProblems;
-                    worstSensor = sensor.letter;
+                if (sensor.status === 'OPERATIONAL') {
+                    let crit = 0, warn = 0;
+                    sensor.alerts.forEach(a => a.type === 'CRITICAL' ? crit++ : warn++);
+                    
+                    totalWarn += warn;
+                    totalCrit += crit;
+                    
+                    const totalProblems = crit + warn;
+                    if (totalProblems > maxProblems && totalProblems > 0) {
+                        maxProblems = totalProblems;
+                        worstSensor = sensor.name;
+                    }
                 }
             });
 
@@ -179,30 +195,36 @@
             document.getElementById('statWorstSensor').textContent = worstSensor;
         }
 
+        
+
         window.openDrawer = (sensorId) => {
+            const sensor = sensorsState[sensorId];
+            if (sensor.status === 'DISABLED') return;
             currentOpenSensor = sensorId;
             document.getElementById('sensorDrawer').classList.add('open');
             document.getElementById('overlay').classList.add('active');
             renderDrawerContent(sensorId);
         };
-
         window.closeDrawer = () => {
             currentOpenSensor = null;
             document.getElementById('sensorDrawer').classList.remove('open');
             document.getElementById('overlay').classList.remove('active');
         };
-
         function renderDrawerContent(sensorId) {
             const sensor = sensorsState[sensorId];
-            document.getElementById('drawerTitle').textContent = `Sensor ${sensor.letter}`;
+            document.getElementById('drawerTitle').textContent = sensor.name;
             const content = document.getElementById('drawerContent');
             content.innerHTML = "";
+
+            if (sensor.status === 'DISABLED') {
+                content.innerHTML = "<p>Este sensor está inhabilitado.</p>";
+                return;
+            }
 
             if (sensor.alerts.length === 0) {
                 content.innerHTML = "<p>Sin alertas activas.</p>";
                 return;
             }
-
             sensor.alerts.forEach(alert => {
                 const div = document.createElement('div');
                 div.className = `alert-item type-${alert.type}`;
@@ -224,11 +246,9 @@
                     btn.onclick = () => sendDecision(alert, opt);
                     btnContainer.appendChild(btn);
                 });
-
                 content.appendChild(div);
             });
         }
-
         async function sendDecision(alertObject, action) {
             try {
                 const response = await fetch(ACTION_DISPATCHER_URL, {
@@ -238,7 +258,27 @@
                 });
 
                 if (response.ok) {
-                    sensorsState[alertObject.sensor_id].alerts = sensorsState[alertObject.sensor_id].alerts.filter(a => a.alert_id !== alertObject.alert_id);
+                    const sensor = sensorsState[alertObject.sensor_id];
+                    const decision = {
+                        alertId: alertObject.alert_id,
+                        sensorId: alertObject.sensor_id,
+                        sensorName: sensor.name,
+                        action: action,
+                        timestamp: new Date().toLocaleTimeString()
+                    };
+                    
+                    let history = JSON.parse(localStorage.getItem('decisionHistory')) || [];
+                    history.push(decision);
+                    localStorage.setItem('decisionHistory', JSON.stringify(history));
+
+                    if (action === 'APAGADO_INMEDIATO') {
+                        sensor.status = 'DISABLED';
+                        sensor.alerts = []; // Limpiar alertas al inhabilitar
+                        closeDrawer();
+                    } else {
+                        sensor.alerts = sensor.alerts.filter(a => a.alert_id !== alertObject.alert_id);
+                    }
+                    
                     updateUI();
                 }
             } catch (e) {
@@ -265,12 +305,10 @@
                  document.getElementById(dot).style.color = 'red';
             };
         }
-
         function handlePlantState(data) {}
-
         function handleNewAlert(data) {
             const sensorKey = `sensor_${data.sensor_id.replace('sensor_', '')}`;
-            if (sensorsState[sensorKey]) {
+            if (sensorsState[sensorKey] && sensorsState[sensorKey].status !== 'DISABLED') {
                 const exists = sensorsState[sensorKey].alerts.some(a => a.alert_id === data.alert_id);
                 if (!exists) {
                     sensorsState[sensorKey].alerts.unshift(data);
@@ -278,7 +316,6 @@
                 }
             }
         }
-
         initSensors();
         setupWebSocket("ws://localhost:8081/ws", 'status');
         setupWebSocket("ws://localhost:8082/ws", 'action');

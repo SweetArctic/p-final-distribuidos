@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acciones Programadas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="main-layout">
+        <div class="dashboard-content">
+            <h1>Acciones Programadas</h1>
+            <div id="programmedActions">
+                </div>
+                <div class="programed-actions">
+                    <a href="dashboard.html" class="programed-actions-btn">Volver al Dashboard</a>
+                </div>
+            </div>
+        </div>
+        <script>
+            const SENSOR_REACTIVATION_URL = "http://localhost:8080/reactivate"; // Assuming this endpoint exists
+            
+            function renderProgrammedActions() {
+                const history = JSON.parse(localStorage.getItem('decisionHistory')) || [];
+                const container = document.getElementById('programmedActions');
+                container.innerHTML = '';
+
+                if (history.length === 0) {
+                    container.innerHTML = '<p>No hay acciones programadas.</p>';
+                    return;
+                }
+
+                const table = document.createElement('table');
+                table.className = 'history-table';
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>ID Alerta</th>
+                            <th>Sensor</th>
+                            <th>Acción Tomada</th>
+                            <th>Hora</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                `;
+                const tbody = table.querySelector('tbody');
+                history.slice().reverse().forEach((item, index) => {
+                    const row = document.createElement('tr');
+                    let actionButton = '';
+                    if (item.action === 'PROGRAMAR_MANTENIMIENTO_AHORA' || item.action === 'RECONOCER_Y_ESPERAR_24H') {
+                        actionButton = `<button class="action-btn" onclick="completeMaintenance('${item.alertId}', ${index}, '${item.sensorId}')">Mantenimiento realizado</button>`;
+                    }
+
+                    row.innerHTML = `
+                        <td>${item.alertId.substring(0, 8)}...</td>
+                        <td>${item.sensorName}</td>
+                        <td>${item.action.replaceAll('_', ' ')}</td>
+                        <td>${item.timestamp}</td>
+                        <td>${actionButton}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                container.appendChild(table);
+            }
+
+            async function completeMaintenance(alertId, index, sensorId) {
+                try {
+                    const response = await fetch(SENSOR_REACTIVATION_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ sensor_id: sensorId })
+                    });
+
+                    if (response.ok) {
+                        let history = JSON.parse(localStorage.getItem('decisionHistory')) || [];
+                        history.splice(history.length - 1 - index, 1);
+                        localStorage.setItem('decisionHistory', JSON.stringify(history));
+                        renderProgrammedActions();
+                    } else {
+                        alert("Error al reactivar el sensor");
+                    }
+                } catch (e) {
+                    alert("Error de conexión");
+                }
+            }
+
+            window.onload = renderProgrammedActions;
+        </script>
+    </body>
+    </html>

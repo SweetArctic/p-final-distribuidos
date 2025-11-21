@@ -69,17 +69,76 @@ def shutdown_listener():
     print("Escuchando comandos de apagado en RabbitMQ...")
 
     def callback(ch, method, properties, body):
-        sensor_id_to_stop = body.decode()
-        print(f"Recibido comando de apagado para: {sensor_id_to_stop}")
-        if sensor_id_to_stop in stop_events:
-            stop_events[sensor_id_to_stop].set()
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-        else:
-            print(f"Error: Sensor ID '{sensor_id_to_stop}' no encontrado.")
-            ch.basic_nack(delivery_tag=method.delivery_tag)
+        try:
+            data = json.loads(body.decode('utf-8'))
+            sensor_id_to_stop = data.get('sensor_id')
+            
+            if not sensor_id_to_stop:
+                print(f"Error: No se encontró 'sensor_id' en el mensaje: {data}")
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return
+
+            print(f"Recibido comando de apagado para: {sensor_id_to_stop}")
+            if sensor_id_to_stop in stop_events:
+                stop_events[sensor_id_to_stop].set()
+                print(f"--- Sensor {sensor_id_to_stop} detenido. ---")
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            else:
+                print(f"Error: Sensor ID '{sensor_id_to_stop}' no encontrado.")
+                ch.basic_nack(delivery_tag=method.delivery_tag)
+        except json.JSONDecodeError:
+            print(f"Error: No se pudo decodificar el mensaje JSON: {body}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        except Exception as e:
+            print(f"Error inesperado en el callback: {e}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
 
     channel.basic_consume(queue=SHUTDOWN_QUEUE, on_message_callback=callback)
     channel.start_consuming()
+    channel.close()
+    connection.close()
+
+def reactivate_listener():
+    """Listens to RabbitMQ for reactivate commands and restarts the corresponding sensor thread."""
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+    channel = connection.channel()
+    channel.queue_declare(queue='reactivate_queue', durable=True)
+    print("Escuchando comandos de reactivación en RabbitMQ...")
+
+    def callback(ch, method, properties, body):
+        try:
+            data = json.loads(body.decode('utf-8'))
+            sensor_id_to_reactivate = data.get('sensor_id')
+            
+            if not sensor_id_to_reactivate:
+                print(f"Error: No se encontró 'sensor_id' en el mensaje: {data}")
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return
+
+            print(f"Recibido comando de reactivación para: {sensor_id_to_reactivate}")
+            if sensor_id_to_reactivate in stop_events:
+                stop_events[sensor_id_to_reactivate].clear()
+                thread = threading.Thread(target=run_sensor, args=(sensor_id_to_reactivate, get_kafka_producer(), stop_events[sensor_id_to_reactivate]))
+                sensor_threads[sensor_id_to_reactivate] = thread
+                thread.start()
+                print(f"--- Sensor {sensor_id_to_reactivate} reactivado. ---")
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            else:
+                print(f"Error: Sensor ID '{sensor_id_to_reactivate}' no encontrado.")
+                ch.basic_nack(delivery_tag=method.delivery_tag)
+        except json.JSONDecodeError:
+            print(f"Error: No se pudo decodificar el mensaje JSON: {body}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        except Exception as e:
+            print(f"Error inesperado en el callback: {e}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
+
+    channel.basic_consume(queue='reactivate_queue', on_message_callback=callback)
+    channel.start_consuming()
+    channel.close()
+    connection.close()
 
 if __name__ == "__main__":
     print("Iniciando sensor_producer...")
@@ -88,6 +147,10 @@ if __name__ == "__main__":
     # Start the shutdown listener in a separate thread
     shutdown_thread = threading.Thread(target=shutdown_listener, daemon=True)
     shutdown_thread.start()
+
+    # Start the reactivate listener in a separate thread
+    reactivate_thread = threading.Thread(target=reactivate_listener, daemon=True)
+    reactivate_thread.start()
 
     # Start a thread for each sensor
     for sensor_id in SENSOR_IDS:

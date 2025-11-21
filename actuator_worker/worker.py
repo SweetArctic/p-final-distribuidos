@@ -32,14 +32,16 @@ def connect_rabbitmq():
 def on_message_callback(ch, method, properties, body):
     try:
         data = json.loads(body.decode('utf-8'))
-        sensor_id = data.get('sensor_id')
         action = data.get('action')
+        alert = data.get('alert')
         
-        if not sensor_id:
-            print(f"Error: No se encontró 'sensor_id' en el mensaje: {data}")
+        if not alert or 'sensor_id' not in alert:
+            print(f"Error: No se encontró 'alert' con 'sensor_id' en el mensaje: {data}")
             ch.basic_ack(delivery_tag=method.delivery_tag)
             return
 
+        sensor_id = alert['sensor_id']
+        
         print("\n--- ¡ACCIÓN CRÍTICA RECIBIDA! ---")
         print(f"  Sensor ID: {sensor_id}")
         print(f"  Acción: {action}")
@@ -49,8 +51,11 @@ def on_message_callback(ch, method, properties, body):
         ch.basic_publish(
             exchange='',
             routing_key=SHUTDOWN_QUEUE,
-            body=sensor_id,
-            properties=pika.BasicProperties(delivery_mode=2)
+            body=json.dumps({'sensor_id': sensor_id}),  # Enviar un JSON con el ID
+            properties=pika.BasicProperties(
+                delivery_mode=2,
+                content_type='application/json'
+            )
         )
         print(f"  ... Comando enviado a la cola '{SHUTDOWN_QUEUE}'.")
         

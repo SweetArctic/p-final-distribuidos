@@ -10,6 +10,7 @@ RABBITMQ_HOST = 'rabbitmq'
 CRITICAL_QUEUE = 'critical_actions_queue'
 MAINTENANCE_QUEUE = 'maintenance_queue'
 ACKNOWLEDGED_CRITICAL_QUEUE = 'acknowledged_critical_queue' # Nueva cola
+REACTIVATE_QUEUE = 'reactivate_queue' # Nueva cola
 DELAYED_EXCHANGE = 'delayed_maintenance_exchange'
 DELAY_24H_MS = 24 * 60 * 60 * 1000
 
@@ -22,6 +23,9 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True
 class Decision(BaseModel):
     chosen_action: str
     alert: dict # Recibimos la alerta completa
+
+class Reactivate(BaseModel):
+    sensor_id: str
 
 def get_rabbitmq_connection():
     try:
@@ -42,6 +46,7 @@ def get_channel():
         channel.queue_declare(queue=CRITICAL_QUEUE, durable=True)
         channel.queue_declare(queue=MAINTENANCE_QUEUE, durable=True)
         channel.queue_declare(queue=ACKNOWLEDGED_CRITICAL_QUEUE, durable=True) # Declarar nueva cola
+        channel.queue_declare(queue=REACTIVATE_QUEUE, durable=True) # Declarar nueva cola
 
         channel.exchange_declare(
             exchange=DELAYED_EXCHANGE,
@@ -65,6 +70,26 @@ async def decide_action(decision: Decision, background_tasks: BackgroundTasks):
     background_tasks.add_task(route_decision, decision)
     return {"status": "decision_received", "alert_id": alert_id, "action": decision.chosen_action}
 
+@app.post("/reactivate")
+async def reactivate_sensor(reactivate: Reactivate, background_tasks: BackgroundTasks):
+    print(f"Dispatcher: Solicitud de reactivación recibida para {reactivate.sensor_id}")
+    background_tasks.add_task(route_reactivation, reactivate)
+    return {"status": "reactivation_request_received", "sensor_id": reactivate.sensor_id}
+
+def route_reactivation(reactivate: Reactivate):
+    try:
+        with get_channel() as channel:
+            action_body = json.dumps({"action": "REACTIVATE", "sensor_id": reactivate.sensor_id})
+            channel.basic_publish(
+                exchange='',
+                routing_key=REACTIVATE_QUEUE,
+                body=action_body,
+                properties=pika.BasicProperties(delivery_mode=2)
+            )
+            print(f"Enrutada reactivación del sensor {reactivate.sensor_id} a {REACTIVATE_QUEUE}")
+    except Exception as e:
+        print(f"Error al enrutar la reactivación para el sensor {reactivate.sensor_id}: {e}")
+
 def route_decision(decision: Decision):
     try:
         with get_channel() as channel:
@@ -72,32 +97,17 @@ def route_decision(decision: Decision):
             alert_id = alert.get("alert_id", "N/A")
             
             if decision.chosen_action == "APAGADO_INMEDIATO":
-                sensor_id = alert.get("sensor_id")
-                if not sensor_id:
-                    print(f"Error: No se encontró sensor_id en la alerta {alert_id}")
-                    return
-                
-                action_body = json.dumps({"action": decision.chosen_action, "sensor_id": sensor_id})
+                action_body = json.dumps({"action": decision.chosen_action, "alert": alert})
                 channel.basic_publish(
                     exchange='',
                     routing_key=CRITICAL_QUEUE,
                     body=action_body,
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
-                print(f"Enrutado apagado del sensor {sensor_id} a {CRITICAL_QUEUE}")
-
-            elif decision.chosen_action == "IGNORAR_10_MINUTOS":
-                # Publicar la alerta completa en la nueva cola
-                channel.basic_publish(
-                    exchange='',
-                    routing_key=ACKNOWLEDGED_CRITICAL_QUEUE,
-                    body=json.dumps(alert),
-                    properties=pika.BasicProperties(delivery_mode=2)
-                )
-                print(f"Enrutada alerta crítica {alert_id} a {ACKNOWLEDGED_CRITICAL_QUEUE} para revisión")
+                print(f"Enrutado apagado del sensor {alert.get('sensor_id')} a {CRITICAL_QUEUE}")
 
             elif decision.chosen_action == "PROGRAMAR_MANTENIMIENTO_AHORA":
-                action_body = json.dumps({"alert_id": alert_id, "action": decision.chosen_action})
+                action_body = json.dumps(alert)
                 channel.basic_publish(
                     exchange='',
                     routing_key=MAINTENANCE_QUEUE,
@@ -107,7 +117,7 @@ def route_decision(decision: Decision):
                 print(f"Enrutado {alert_id} a {MAINTENANCE_QUEUE} (ahora)")
 
             elif decision.chosen_action == "RECONOCER_Y_ESPERAR_24H":
-                action_body = json.dumps({"alert_id": alert_id, "action": decision.chosen_action})
+                action_body = json.dumps(alert)
                 properties = pika.BasicProperties(delivery_mode=2, headers={'x-delay': DELAY_24H_MS})
                 channel.basic_publish(
                     exchange=DELAYED_EXCHANGE,

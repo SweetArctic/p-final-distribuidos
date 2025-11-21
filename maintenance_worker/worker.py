@@ -30,22 +30,22 @@ def connect_rabbitmq():
 
 def on_message_callback(ch, method, properties, body):
     try:
-        data = json.loads(body.decode('utf-8'))
-        alert_id = data.get('alert_id')
-        action = data.get('action')
+        alert = json.loads(body.decode('utf-8'))
+        alert_id = alert.get('alert_id')
+        sensor_id = alert.get('sensor_id')
         
         print("\n--- ¡TAREA DE MANTENIMIENTO RECIBIDA! ---")
         print(f"  Alerta ID: {alert_id}")
-        print(f"  Acción: {action}")
+        print(f"  Sensor ID: {sensor_id}")
         
         # Simular el trabajo (ej. crear una orden de trabajo)
-        print(f"  ... Creando orden de trabajo en sistema de mantenimiento ...")
+        print(f"  ... Creando orden de trabajo para el sensor {sensor_id} ...")
         time.sleep(2) 
         print(f"  ... Orden de trabajo creada exitosamente ...")
         
         # Confirmar (ack) que el mensaje fue procesado
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        print(f"--- Tarea {alert_id} completada. Esperando nuevas tareas. ---")
+        print(f"--- Tarea para la alerta {alert_id} completada. Esperando nuevas tareas. ---")
         
     except json.JSONDecodeError:
         print(f"Error: No se pudo decodificar el mensaje: {body}")
